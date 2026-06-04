@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -36,8 +38,30 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     reset_token_expire_minutes: int = 30
 
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # CORS. NoDecode keeps pydantic-settings from JSON-parsing the env var, so the
+    # validator below can accept any format and the app never crashes on a bad value.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors(cls, v: object) -> list[str]:
+        """Accept a JSON array (``["https://a","https://b"]``), a comma-separated list
+        (``https://a,https://b``) or a single URL (``https://a``)."""
+        if v is None:
+            return ["http://localhost:3000"]
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return ["http://localhost:3000"]
+            if s.startswith("["):
+                try:
+                    return json.loads(s)
+                except json.JSONDecodeError:
+                    pass
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v  # type: ignore[return-value]
 
     # Public site base URL (used to build client-facing links in emails)
     public_base_url: str = "http://localhost:3000"
