@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_owner, require_staff
-from app.models import Booking, BookingStatus, Resource, Service, User
+from app.models import Booking, BookingStatus, Resource, Service, User, UserRole
 from app.routers.packages import packages_for
 from app.schemas.booking import BookingCreate, BookingOut, BookingUpdate
 from app.services.availability import (
@@ -23,6 +23,9 @@ from app.services.plans import enforce_limit
 
 def _filtered_query(user: User, db: Session, status_filter, resource_id, date_from, date_to, q):
     stmt = select(Booking).where(Booking.tenant_id == user.tenant_id)
+    # Staff tied to a resource only ever see that resource's bookings.
+    if user.role == UserRole.staff and user.resource_id is not None:
+        stmt = stmt.where(Booking.resource_id == user.resource_id)
     if status_filter is not None:
         stmt = stmt.where(Booking.status == status_filter)
     if resource_id is not None:
@@ -48,9 +51,15 @@ def _filtered_query(user: User, db: Session, status_filter, resource_id, date_fr
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-def _get_owned(db: Session, booking_id: int, tenant_id: int) -> Booking:
+def _get_owned(db: Session, booking_id: int, user: User) -> Booking:
     booking = db.get(Booking, booking_id)
-    if not booking or booking.tenant_id != tenant_id:
+    if not booking or booking.tenant_id != user.tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
+    if (
+        user.role == UserRole.staff
+        and user.resource_id is not None
+        and booking.resource_id != user.resource_id
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking not found")
     return booking
 
@@ -181,7 +190,7 @@ def update_booking(
     db: Session = Depends(get_db),
     user: User = Depends(require_staff),
 ) -> Booking:
-    booking = _get_owned(db, booking_id, user.tenant_id)
+    booking = _get_owned(db, booking_id, user)
     data = payload.model_dump(exclude_unset=True)
 
     # Determine the effective service/resource/start for revalidation.
@@ -232,7 +241,7 @@ def cancel_booking(
     db: Session = Depends(get_db),
     user: User = Depends(require_staff),
 ) -> None:
-    booking = _get_owned(db, booking_id, user.tenant_id)
+    booking = _get_owned(db, booking_id, user)
     booking.status = BookingStatus.cancelled
     db.commit()
     db.refresh(booking)

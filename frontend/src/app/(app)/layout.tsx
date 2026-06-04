@@ -54,6 +54,8 @@ type NavItem = {
   label: string;
   icon: React.ElementType;
   ownerOnly?: boolean;
+  // Visible to staff users (peluqueros, etc.). Omitted = owner-only.
+  staff?: boolean;
   feature?: string;
   // Only show this item in the given booking mode. Omitted = show in both.
   mode?: "appointments" | "events";
@@ -65,9 +67,9 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Principal",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/calendar", label: "Calendario", icon: CalendarDays },
-      { href: "/bookings", label: "Reservas", icon: ListChecks },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, staff: true },
+      { href: "/calendar", label: "Calendario", icon: CalendarDays, staff: true },
+      { href: "/bookings", label: "Reservas", icon: ListChecks, staff: true },
     ],
   },
   {
@@ -106,6 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const visible = (item: NavItem) =>
     (!item.ownerOnly || user?.role === "owner") &&
+    (user?.role !== "staff" || item.staff === true) &&
     (!item.feature || features.includes(item.feature)) &&
     (!item.mode || item.mode === mode);
 

@@ -15,6 +15,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: UserRole = UserRole.staff
+    resource_id: int | None = None
 
     _check_role = field_validator("role")(_staff_or_owner)
 
@@ -24,5 +25,6 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     active: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    resource_id: int | None = None
 
     _check_role = field_validator("role")(_staff_or_owner)

@@ -56,6 +56,7 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     role: UserRole
+    resource_id: int | None = None
     active: bool
     email_verified: bool
     created_at: datetime

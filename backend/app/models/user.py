@@ -22,6 +22,11 @@ class User(Base):
     tenant_id: Mapped[int] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    # Staff users can be tied to a resource (e.g. a hairdresser ↔ their chair); when set,
+    # the panel only shows that resource's bookings to them.
+    resource_id: Mapped[int | None] = mapped_column(
+        ForeignKey("resources.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)

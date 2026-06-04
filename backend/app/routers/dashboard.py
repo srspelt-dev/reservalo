@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Booking, BookingStatus, Package, Resource, Schedule, Service, User
+from app.models import Booking, BookingStatus, Package, Resource, Schedule, Service, User, UserRole
 from app.schemas.booking import BookingOut
 from app.services.availability import get_zone
 
@@ -48,6 +48,12 @@ def dashboard(
     end_today = datetime.combine(today_local, datetime.max.time()).replace(tzinfo=tz)
 
     active = Booking.status.in_([BookingStatus.pending, BookingStatus.confirmed])
+    # Staff tied to a resource only see their own bookings across the whole dashboard.
+    staff_only = (
+        [Booking.resource_id == user.resource_id]
+        if user.role == UserRole.staff and user.resource_id is not None
+        else []
+    )
 
     today_bookings = list(
         db.scalars(
@@ -55,6 +61,7 @@ def dashboard(
             .where(
                 Booking.tenant_id == tid,
                 active,
+                *staff_only,
                 Booking.start_datetime >= start_today,
                 Booking.start_datetime <= end_today,
             )
@@ -65,7 +72,7 @@ def dashboard(
     upcoming_bookings = list(
         db.scalars(
             select(Booking)
-            .where(Booking.tenant_id == tid, active, Booking.start_datetime > now)
+            .where(Booking.tenant_id == tid, active, *staff_only, Booking.start_datetime > now)
             .order_by(Booking.start_datetime)
             .limit(10)
         )
@@ -74,7 +81,7 @@ def dashboard(
     # Distinct clients by email (falling back to name when email is absent).
     total_clients = db.scalar(
         select(func.count(func.distinct(func.coalesce(Booking.client_email, Booking.client_name))))
-        .where(Booking.tenant_id == tid)
+        .where(Booking.tenant_id == tid, *staff_only)
     ) or 0
 
     total_services = db.scalar(
@@ -109,6 +116,7 @@ def dashboard(
             select(Booking).where(
                 Booking.tenant_id == tid,
                 active,
+                *staff_only,
                 Booking.start_datetime >= week_lo,
                 Booking.start_datetime <= week_hi,
             )
@@ -132,6 +140,7 @@ def dashboard(
         select(func.count(Booking.id)).where(
             Booking.tenant_id == tid,
             active,
+            *staff_only,
             Booking.start_datetime >= prev_lo,
             Booking.start_datetime <= prev_hi,
         )
@@ -140,7 +149,7 @@ def dashboard(
     recent = list(
         db.scalars(
             select(Booking)
-            .where(Booking.tenant_id == tid)
+            .where(Booking.tenant_id == tid, *staff_only)
             .order_by(Booking.created_at.desc())
             .limit(6)
         )
@@ -152,7 +161,7 @@ def dashboard(
         bookings_week_prev=bookings_week_prev,
         upcoming_bookings=db.scalar(
             select(func.count(Booking.id)).where(
-                Booking.tenant_id == tid, active, Booking.start_datetime > now
+                Booking.tenant_id == tid, active, *staff_only, Booking.start_datetime > now
             )
         ) or 0,
         total_clients=total_clients,

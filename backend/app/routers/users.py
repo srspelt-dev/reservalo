@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_owner
-from app.models import User, UserRole
+from app.models import Resource, User, UserRole
 from app.schemas.auth import UserOut
 from app.schemas.user import UserCreate, UserUpdate
 from app.security import hash_password
@@ -18,6 +18,14 @@ def _get_owned(db: Session, user_id: int, tenant_id: int) -> User:
     if not user or user.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return user
+
+
+def _validate_resource(db: Session, tenant_id: int, resource_id: int | None) -> None:
+    if resource_id is None:
+        return
+    resource = db.get(Resource, resource_id)
+    if not resource or resource.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resource not found")
 
 
 def _active_owner_count(db: Session, tenant_id: int, exclude_id: int | None = None) -> int:
@@ -53,6 +61,7 @@ def create_user(
     )
     if exists:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already in use in this business")
+    _validate_resource(db, current.tenant_id, payload.resource_id)
 
     user = User(
         tenant_id=current.tenant_id,
@@ -60,6 +69,7 @@ def create_user(
         email=email,
         password_hash=hash_password(payload.password),
         role=payload.role,
+        resource_id=payload.resource_id,
     )
     db.add(user)
     db.commit()
@@ -76,6 +86,8 @@ def update_user(
 ) -> User:
     user = _get_owned(db, user_id, current.tenant_id)
     data = payload.model_dump(exclude_unset=True)
+    if "resource_id" in data:
+        _validate_resource(db, current.tenant_id, data["resource_id"])
 
     # Guard: never leave the business without an active owner.
     demoting = "role" in data and data["role"] != UserRole.owner and user.role == UserRole.owner

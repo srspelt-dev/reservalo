@@ -9,6 +9,7 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  resource_id: number | null;
   active: boolean;
   email_verified: boolean;
   created_at: string;

@@ -7,7 +7,7 @@ import { Pencil, Plus, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
 import { useCurrentUser } from "@/hooks/use-auth";
-import type { Role, User } from "@/lib/types";
+import type { Resource, Role, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,9 +44,17 @@ interface Draft {
   password: string;
   role: Role;
   active: boolean;
+  resource_id: number | null;
 }
 
-const EMPTY: Draft = { name: "", email: "", password: "", role: "staff", active: true };
+const EMPTY: Draft = {
+  name: "",
+  email: "",
+  password: "",
+  role: "staff",
+  active: true,
+  resource_id: null,
+};
 
 export default function UsersPage() {
   const qc = useQueryClient();
@@ -67,10 +75,24 @@ export default function UsersPage() {
     enabled: me?.role === "owner",
   });
 
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["resources"],
+    queryFn: async () => (await api.get<Resource[]>("/resources")).data,
+    enabled: me?.role === "owner",
+  });
+  const resourceName = (id: number | null) =>
+    id ? resources.find((r) => r.id === id)?.name ?? null : null;
+
   const save = useMutation({
     mutationFn: async (d: Draft) => {
+      const resId = d.role === "staff" ? d.resource_id : null;
       if (d.id) {
-        const body: Record<string, unknown> = { name: d.name, role: d.role, active: d.active };
+        const body: Record<string, unknown> = {
+          name: d.name,
+          role: d.role,
+          active: d.active,
+          resource_id: resId,
+        };
         if (d.password) body.password = d.password;
         return api.put(`/users/${d.id}`, body);
       }
@@ -79,6 +101,7 @@ export default function UsersPage() {
         email: d.email,
         password: d.password,
         role: d.role,
+        resource_id: resId,
       });
     },
     onSuccess: () => {
@@ -103,7 +126,15 @@ export default function UsersPage() {
     setOpen(true);
   }
   function openEdit(u: User) {
-    setDraft({ id: u.id, name: u.name, email: u.email, password: "", role: u.role, active: u.active });
+    setDraft({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      password: "",
+      role: u.role,
+      active: u.active,
+      resource_id: u.resource_id ?? null,
+    });
     setOpen(true);
   }
 
@@ -124,6 +155,7 @@ export default function UsersPage() {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Rol</TableHead>
+                <TableHead>Recurso</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="w-24 text-right">Acciones</TableHead>
               </TableRow>
@@ -131,7 +163,7 @@ export default function UsersPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5}>Cargando...</TableCell>
+                  <TableCell colSpan={6}>Cargando...</TableCell>
                 </TableRow>
               ) : (
                 users.map((u) => (
@@ -145,6 +177,9 @@ export default function UsersPage() {
                     <TableCell>{u.email}</TableCell>
                     <TableCell className="capitalize">
                       {u.role === "owner" ? "Dueño" : "Staff"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {u.role === "staff" ? resourceName(u.resource_id) ?? "Todo" : "—"}
                     </TableCell>
                     <TableCell>
                       <Badge variant={u.active ? "success" : "secondary"}>
@@ -255,6 +290,32 @@ export default function UsersPage() {
                 </div>
               )}
             </div>
+            {draft.role === "staff" && (
+              <div className="space-y-2">
+                <Label>Recurso asignado</Label>
+                <Select
+                  value={draft.resource_id ? String(draft.resource_id) : "none"}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, resource_id: v === "none" ? null : Number(v) })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar (ve todo)</SelectItem>
+                    {resources.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Si asignás un recurso, esta persona solo verá su propio calendario y reservas.
+                </p>
+              </div>
+            )}
             <DialogFooter>
               <Button type="submit" loading={save.isPending}>
                 Guardar
