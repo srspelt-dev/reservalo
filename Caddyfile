@@ -1,0 +1,11 @@
+# Reemplazá los dominios por los tuyos. Caddy gestiona el certificado HTTPS solo.
+
+# Frontend (panel + reservas públicas)
+app.midominio.com {
+	reverse_proxy frontend:3000
+}
+
+# API (backend)
+api.midominio.com {
+	reverse_proxy backend:8000
+}
