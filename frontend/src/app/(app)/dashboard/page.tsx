@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { CalendarClock, CalendarCheck, Users, Scissors, Gift, Check, Circle } from "lucide-react";
+import { CalendarClock, CalendarCheck, Users, Scissors, Gift, Check, Circle, Inbox } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { api } from "@/lib/api";
@@ -12,6 +12,7 @@ import type { DashboardStats } from "@/lib/types";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useTenant } from "@/hooks/use-tenant";
 import { PlanUsage } from "@/components/plan-usage";
+import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
@@ -167,7 +168,7 @@ function RecentActivity({ recent }: { recent: DashboardStats["recent"] }) {
       </CardHeader>
       <CardContent>
         {recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin actividad todavía.</p>
+          <EmptyState compact icon={Inbox} title="Sin actividad todavía" description="Las reservas recientes van a aparecer acá." />
         ) : (
           <div className="space-y-3">
             {recent.map((b) => (
@@ -288,7 +289,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {data.today.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay reservas para hoy.</p>
+              <EmptyState compact icon={CalendarCheck} title="No hay reservas para hoy" description="Cuando entre una reserva para hoy, va a aparecer acá." />
             ) : (
               data.today.map((b) => <BookingRow key={b.id} b={b} />)
             )}
@@ -301,7 +302,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {data.upcoming.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay próximas reservas.</p>
+              <EmptyState compact icon={CalendarClock} title="No hay próximas reservas" description="Compartí tu link de reservas para empezar a recibir turnos." />
             ) : (
               data.upcoming.map((b) => <BookingRow key={b.id} b={b} />)
             )}

@@ -210,11 +210,11 @@ export default function CalendarPage() {
       )}
 
       <div className="flex items-center justify-between">
-        <Button variant="outline" size="icon" onClick={() => move(-1)}>
+        <Button variant="outline" size="icon" onClick={() => move(-1)} aria-label="Anterior">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="text-lg font-medium capitalize">{title}</span>
-        <Button variant="outline" size="icon" onClick={() => move(1)}>
+        <Button variant="outline" size="icon" onClick={() => move(1)} aria-label="Siguiente">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>

@@ -207,6 +207,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="icon"
+              aria-label="Copiar enlace"
               onClick={() => {
                 navigator.clipboard.writeText(publicUrl);
                 toast.success("Enlace copiado");

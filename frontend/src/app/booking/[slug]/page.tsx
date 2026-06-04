@@ -2,7 +2,16 @@
 
 import { use, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CalendarCheck, Check, Copy, MapPin, MessageCircle, ArrowLeft } from "lucide-react";
+import {
+  CalendarCheck,
+  Check,
+  Copy,
+  MapPin,
+  MessageCircle,
+  ArrowLeft,
+  CalendarPlus,
+  Zap,
+} from "lucide-react";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -125,6 +134,63 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     const manageUrl =
       typeof window !== "undefined" ? `${window.location.origin}/booking/${slug}/r/${manageCode}` : "";
     const resourceName = tenant.resources.find((r) => r.id === resourceId)?.name;
+
+    // ---- Add to calendar ----
+    const startD = slot ? new Date(slot) : null;
+    let endD: Date | null = null;
+    if (startD) {
+      if (service) {
+        endD = new Date(startD.getTime() + service.duration_minutes * 60000);
+      } else {
+        const idx = avail?.slots.indexOf(slot!) ?? -1;
+        const e = idx >= 0 ? avail?.ends?.[idx] : null;
+        endD = e
+          ? new Date(e)
+          : new Date(startD.getTime() + (tenant.event_duration_minutes || 60) * 60000);
+      }
+    }
+    const calTitle = service?.name
+      ? `${service.name} · ${tenant.name}`
+      : `Reserva · ${tenant.name}`;
+    const calDetails = `Reserva en ${tenant.name}.${
+      manageUrl ? ` Gestioná tu reserva: ${manageUrl}` : ""
+    }`;
+    const fmtCal = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const gcalUrl =
+      startD && endD
+        ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+            calTitle
+          )}&dates=${fmtCal(startD)}/${fmtCal(endD)}&details=${encodeURIComponent(calDetails)}${
+            tenant.location_url ? `&location=${encodeURIComponent(tenant.location_url)}` : ""
+          }`
+        : "";
+    const downloadIcs = () => {
+      if (!startD || !endD) return;
+      const ics = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Reservalo//ES",
+        "BEGIN:VEVENT",
+        `UID:${manageCode}@reservalo`,
+        `DTSTAMP:${fmtCal(new Date())}`,
+        `DTSTART:${fmtCal(startD)}`,
+        `DTEND:${fmtCal(endD)}`,
+        `SUMMARY:${calTitle}`,
+        tenant.location_url ? `LOCATION:${tenant.location_url}` : "",
+        `DESCRIPTION:${calDetails}`,
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ]
+        .filter(Boolean)
+        .join("\r\n");
+      const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reserva.ics";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4" style={brandStyle}>
         <Card className="w-full max-w-md animate-in fade-in zoom-in-95 duration-300">
@@ -213,6 +279,31 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               </p>
             </div>
 
+            {startD && endD && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Agregar al calendario
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={gcalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background text-sm font-medium transition-colors hover:border-[var(--brand)]"
+                  >
+                    <CalendarPlus className="h-4 w-4" /> Google
+                  </a>
+                  <button
+                    type="button"
+                    onClick={downloadIcs}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background text-sm font-medium transition-colors hover:border-[var(--brand)]"
+                  >
+                    <CalendarPlus className="h-4 w-4" /> Apple / Outlook
+                  </button>
+                </div>
+              </div>
+            )}
+
             <Button
               className="w-full bg-[var(--brand)] hover:opacity-90"
               onClick={() => window.location.reload()}
@@ -250,6 +341,18 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             {tenant.description && (
               <p className="mt-1 text-muted-foreground">{tenant.description}</p>
             )}
+
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Zap className="h-3.5 w-3.5 text-[var(--brand)]" /> Reserva al instante
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Check className="h-3.5 w-3.5 text-[var(--brand)]" /> Sin llamadas
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <CalendarCheck className="h-3.5 w-3.5 text-[var(--brand)]" /> Recordatorio
+              </span>
+            </div>
 
             <div className="mt-7 space-y-3">
               <button
@@ -453,30 +556,40 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   className="max-w-xs"
                 />
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(avail?.slots ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No hay horarios disponibles para este día.
-                  </p>
-                ) : (
-                  avail!.slots.map((s, i) => {
-                    const end = avail!.ends?.[i];
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setSlot(s)}
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-sm transition-colors hover:border-[var(--brand)]",
-                          slot === s && "border-[var(--brand)] bg-[var(--brand)] text-white"
-                        )}
-                      >
-                        {format(new Date(s), "HH:mm")}
-                        {end ? `–${format(new Date(end), "HH:mm")}` : ""}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+              {(avail?.slots ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay horarios disponibles para este día. Probá con otra fecha.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setSlot(avail!.slots[0])}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--brand)]/40 bg-[var(--brand)]/5 px-3 py-1.5 text-sm font-medium text-[var(--brand)] transition-colors hover:bg-[var(--brand)]/10"
+                  >
+                    <Zap className="h-4 w-4" /> Próximo disponible:{" "}
+                    {format(new Date(avail!.slots[0]), "HH:mm")}
+                  </button>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {avail!.slots.map((s, i) => {
+                      const end = avail!.ends?.[i];
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setSlot(s)}
+                          className={cn(
+                            "rounded-lg border py-2 text-center text-sm tabular-nums transition-colors hover:border-[var(--brand)]",
+                            slot === s && "border-[var(--brand)] bg-[var(--brand)] text-white"
+                          )}
+                        >
+                          {format(new Date(s), "HH:mm")}
+                          {end ? `–${format(new Date(end), "HH:mm")}` : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -607,6 +720,18 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           </Card>
         )}
       </div>
+
+      {tenant.whatsapp && (
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Consultar por WhatsApp"
+          className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-105"
+        >
+          <MessageCircle className="h-7 w-7" />
+        </a>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   LayoutDashboard,
@@ -117,6 +118,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const flatNav = groups.flatMap((g) => g.items);
 
+  // Command palette (Cmd/Ctrl+K) + notifications dropdown
+  const router = useRouter();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [bellOpen, setBellOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (e.key === "Escape") {
+        setPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const paletteResults = flatNav.filter((i) =>
+    labelFor(i).toLowerCase().includes(query.trim().toLowerCase())
+  );
+  const go = (href: string) => {
+    router.push(href);
+    setPaletteOpen(false);
+    setQuery("");
+  };
+
   if (isLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
@@ -188,7 +215,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="text-lg font-bold">Reservalo</span>
             <div className="flex items-center gap-1">
               <ThemeToggle className="px-2" />
-              <Button variant="ghost" size="icon" onClick={logout}>
+              <Button variant="ghost" size="icon" onClick={logout} aria-label="Cerrar sesión">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
@@ -216,22 +243,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
         <header className="sticky top-0 z-30 hidden h-16 items-center justify-between gap-4 border-b bg-card/80 px-6 backdrop-blur md:flex">
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              placeholder="Buscar..."
-              className="h-9 w-full rounded-full border bg-surface pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="flex h-9 w-full max-w-xs items-center gap-2 rounded-full border bg-surface px-3 text-sm text-muted-foreground transition-colors hover:border-primary/40"
+          >
+            <Search className="h-4 w-4" />
+            <span>Buscar...</span>
+            <kbd className="ml-auto rounded border bg-card px-1.5 py-0.5 text-[10px] font-medium">
+              ⌘K
+            </kbd>
+          </button>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Notificaciones"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <Bell className="h-[18px] w-[18px]" />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Notificaciones"
+                onClick={() => setBellOpen((v) => !v)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Bell className="h-[18px] w-[18px]" />
+              </button>
+              {bellOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border bg-popover p-4 text-sm shadow-lg">
+                    <p className="font-semibold">Notificaciones</p>
+                    <p className="mt-1 text-muted-foreground">No tenés notificaciones nuevas.</p>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="h-6 w-px bg-border" />
             <div className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-accent">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold uppercase text-primary">
@@ -248,6 +290,53 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+
+      {paletteOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh] animate-in fade-in"
+          onClick={() => setPaletteOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-2xl border bg-popover shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 border-b px-4">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && paletteResults[0]) go(paletteResults[0].href);
+                }}
+                placeholder="Buscar páginas del panel..."
+                className="h-12 w-full bg-transparent text-sm outline-none"
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2">
+              {paletteResults.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  Nada encontrado.
+                </p>
+              ) : (
+                paletteResults.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => go(item.href)}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                    >
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      {labelFor(item)}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

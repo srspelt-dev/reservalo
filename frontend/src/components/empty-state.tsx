@@ -6,25 +6,37 @@ export function EmptyState({
   description,
   action,
   className,
+  compact = false,
 }: {
   icon: React.ElementType;
   title: string;
   description?: string;
   action?: React.ReactNode;
   className?: string;
+  compact?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 px-6 py-12 text-center",
+        "flex flex-col items-center justify-center gap-3 text-center",
+        compact
+          ? "px-4 py-8"
+          : "rounded-xl border border-dashed bg-card/40 px-6 py-12",
         className
       )}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-        <Icon className="h-6 w-6 text-muted-foreground" />
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-2xl bg-primary/10 text-primary",
+          compact ? "h-11 w-11" : "h-14 w-14"
+        )}
+      >
+        <Icon className={compact ? "h-5 w-5" : "h-7 w-7"} />
       </div>
       <div className="space-y-1">
-        <p className="font-medium">{title}</p>
+        <p className={cn("font-display font-semibold", compact ? "text-sm" : "text-lg")}>
+          {title}
+        </p>
         {description && (
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">{description}</p>
         )}
