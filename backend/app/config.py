@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,18 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+psycopg2://reservalo:reservalo@localhost:5432/reservalo"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        """Accept the bare ``postgres://`` / ``postgresql://`` URLs that hosts like
+        Railway/Render/Heroku provide and force the psycopg2 driver SQLAlchemy expects."""
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = "postgresql://" + v[len("postgres://") :]
+            if v.startswith("postgresql://"):
+                v = "postgresql+psycopg2://" + v[len("postgresql://") :]
+        return v
 
     # JWT
     secret_key: str = "change-me-in-production-please-use-a-long-random-string"
