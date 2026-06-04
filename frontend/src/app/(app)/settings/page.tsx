@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import { Copy, Plus, Trash2, Download } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
 import { TIMEZONES } from "@/lib/utils";
@@ -103,6 +105,16 @@ export default function SettingsPage() {
   }, [tenant]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const qrRef = useRef<HTMLCanvasElement>(null);
+  const downloadQr = () => {
+    const canvas = qrRef.current;
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `reservalo-${tenant?.slug ?? "qr"}.png`;
+    a.click();
+  };
 
   const save = useMutation({
     mutationFn: () =>
@@ -205,7 +217,7 @@ export default function SettingsPage() {
           <CardTitle>URL pública de reservas</CardTitle>
           <CardDescription>Compartí este enlace con tus clientes</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex max-w-xl items-center gap-2">
             <Input readOnly value={publicUrl} />
             <Button
@@ -220,6 +232,29 @@ export default function SettingsPage() {
               <Copy className="h-4 w-4" />
             </Button>
           </div>
+          {publicUrl && (
+            <div className="flex items-center gap-4 rounded-xl border p-4">
+              <div className="rounded-lg bg-white p-2">
+                <QRCodeCanvas
+                  ref={qrRef}
+                  value={publicUrl}
+                  size={120}
+                  marginSize={2}
+                  fgColor={form.brand_color || "#2563eb"}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Código QR</p>
+                <p className="text-xs text-muted-foreground">
+                  Imprimilo y pegalo en tu local o ponelo en tus flyers. Tus clientes lo escanean y
+                  reservan al instante.
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={downloadQr}>
+                  <Download className="h-4 w-4" /> Descargar QR
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       </div>

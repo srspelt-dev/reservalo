@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { use, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueries } from "@tanstack/react-query";
 import {
   CalendarCheck,
   Check,
@@ -26,6 +26,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+const ANY_RESOURCE = -1; // sentinel: client doesn't care which resource
+
 export default function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [serviceId, setServiceId] = useState<number | null>(null);
@@ -39,6 +41,27 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [done, setDone] = useState(false);
   const [manageCode, setManageCode] = useState<string | null>(null);
   const [view, setView] = useState<"home" | "booking">("home");
+
+  // Auto-advance: scroll to the next step when the current one is completed.
+  const resourceRef = useRef<HTMLDivElement>(null);
+  const dateRef = useRef<HTMLDivElement>(null);
+  const dataRef = useRef<HTMLDivElement>(null);
+  const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) =>
+    setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+
+  // Remember client data for repeat customers.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("reservalo_client");
+      if (saved) {
+        const { name: n, phone: p } = JSON.parse(saved);
+        if (n) setName(n);
+        if (p) setPhone(p);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const { data: tenant, isLoading, isError } = useQuery<PublicTenant>({
     queryKey: ["public-tenant", slug],
@@ -55,23 +78,44 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           params: { resource_id: resourceId, day, ...(serviceId ? { service_id: serviceId } : {}) },
         })
       ).data,
-    enabled: !!resourceId && !!day && (events || !!serviceId),
+    enabled: !!resourceId && resourceId !== ANY_RESOURCE && !!day && (events || !!serviceId),
+  });
+
+  // "Cualquiera disponible": fetch availability for every resource and merge.
+  const anyResource = resourceId === ANY_RESOURCE;
+  const allResources = tenant?.resources ?? [];
+  const multiAvail = useQueries({
+    queries: allResources.map((r) => ({
+      queryKey: ["availability-any", slug, serviceId, r.id, day, events],
+      queryFn: async () =>
+        (
+          await publicApi.get(`/public/${slug}/availability`, {
+            params: { resource_id: r.id, day, ...(serviceId ? { service_id: serviceId } : {}) },
+          })
+        ).data as { slots: string[]; ends?: string[] },
+      enabled: anyResource && !!day && (events || !!serviceId),
+    })),
   });
 
   const book = useMutation({
-    mutationFn: async (method: PaymentMethod | null) =>
+    mutationFn: async (args: { method: PaymentMethod | null; resourceId: number | null }) =>
       (
         await publicApi.post(`/public/${slug}/booking`, {
           service_id: events ? null : serviceId,
-          resource_id: resourceId,
+          resource_id: args.resourceId,
           client_name: name,
           client_phone: phone || null,
           start_datetime: slot,
-          payment_method: method,
+          payment_method: args.method,
           package_ids: packageIds,
         })
       ).data,
     onSuccess: (data: { public_code: string }) => {
+      try {
+        localStorage.setItem("reservalo_client", JSON.stringify({ name, phone }));
+      } catch {
+        /* ignore */
+      }
       setManageCode(data.public_code);
       setDone(true);
       toast.success("¡Reserva confirmada!");
@@ -109,6 +153,32 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       ? tenant.resources.filter((r) => service.resource_ids.includes(r.id))
       : tenant.resources;
 
+  // Merge availability across allowed resources for the "Cualquiera disponible" option.
+  const slotResource = new Map<string, number>();
+  const anySlots: { slot: string; end?: string }[] = [];
+  if (anyResource) {
+    allResources.forEach((r, i) => {
+      if (!allowedResources.some((ar) => ar.id === r.id)) return;
+      const d = multiAvail[i]?.data;
+      d?.slots.forEach((s, j) => {
+        if (!slotResource.has(s)) {
+          slotResource.set(s, r.id);
+          anySlots.push({ slot: s, end: d.ends?.[j] });
+        }
+      });
+    });
+    anySlots.sort((a, b) => a.slot.localeCompare(b.slot));
+  }
+  const displaySlots = anyResource ? anySlots.map((x) => x.slot) : avail?.slots ?? [];
+  const displayEnds = anyResource ? anySlots.map((x) => x.end) : avail?.ends ?? [];
+  // Resource actually sent to the API (resolved from the picked slot when "any").
+  const bookingResourceId = anyResource
+    ? slot
+      ? slotResource.get(slot) ?? null
+      : null
+    : resourceId;
+  const anyLoading = anyResource && multiAvail.some((q) => q.isLoading);
+
   // Payment resolution
   const both = tenant.accept_cash && tenant.accept_transfer;
   const forced: PaymentMethod | null = both
@@ -128,7 +198,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   const step1Done = isEvents ? packageIds.length > 0 : !!serviceId;
   const canConfirm =
-    step1Done && resourceId && slot && name && (!anyPayment || !!effectiveMethod);
+    step1Done && !!bookingResourceId && !!slot && !!name && (!anyPayment || !!effectiveMethod);
+  const submit = () => book.mutate({ method: effectiveMethod, resourceId: bookingResourceId });
 
   const currentStep = !step1Done ? 1 : !resourceId ? 2 : !slot ? 3 : 4;
   const STEPS = isEvents
@@ -462,7 +533,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   // ---- Booking flow view ----
   return (
     <div className="min-h-screen bg-muted/40 py-10" style={brandStyle}>
-      <div className="mx-auto max-w-2xl space-y-6 px-4">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 pb-24 md:pb-0">
         <div className="flex items-center justify-between">
           <button
             onClick={() => setView("home")}
@@ -557,7 +628,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   key={s.id}
                   onClick={() => {
                     setServiceId(s.id);
+                    setResourceId(null);
                     setSlot(null);
+                    scrollTo(resourceRef);
                   }}
                   className={cn(
                     "rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-sm",
@@ -575,6 +648,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         )}
 
         {step1Done && (
+          <div ref={resourceRef}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -582,12 +656,31 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 sm:grid-cols-2">
+              {!isEvents && allowedResources.length > 1 && (
+                <button
+                  onClick={() => {
+                    setResourceId(ANY_RESOURCE);
+                    setSlot(null);
+                    scrollTo(dateRef);
+                  }}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-sm sm:col-span-2",
+                    anyResource && "border-[var(--brand)] bg-muted"
+                  )}
+                >
+                  <p className="font-medium">Cualquiera disponible</p>
+                  <p className="text-sm text-muted-foreground">
+                    Te asignamos el primero libre para el horario que elijas.
+                  </p>
+                </button>
+              )}
               {allowedResources.map((r) => (
                 <button
                   key={r.id}
                   onClick={() => {
                     setResourceId(r.id);
                     setSlot(null);
+                    scrollTo(dateRef);
                   }}
                   className={cn(
                     "rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-sm",
@@ -602,9 +695,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               ))}
             </CardContent>
           </Card>
+          </div>
         )}
 
         {step1Done && resourceId && (
+          <div ref={dateRef}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">3. Elegí fecha y hora</CardTitle>
@@ -624,7 +719,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   className="max-w-xs"
                 />
               </div>
-              {(avail?.slots ?? []).length === 0 ? (
+              {anyLoading ? (
+                <p className="text-sm text-muted-foreground">Buscando horarios disponibles...</p>
+              ) : displaySlots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No hay horarios disponibles para este día. Probá con otra fecha.
                 </p>
@@ -632,19 +729,25 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={() => setSlot(avail!.slots[0])}
+                    onClick={() => {
+                      setSlot(displaySlots[0]);
+                      scrollTo(dataRef);
+                    }}
                     className="inline-flex items-center gap-1.5 rounded-full border border-[var(--brand)]/40 bg-[var(--brand)]/5 px-3 py-1.5 text-sm font-medium text-[var(--brand)] transition-colors hover:bg-[var(--brand)]/10"
                   >
                     <Zap className="h-4 w-4" /> Próximo disponible:{" "}
-                    {format(new Date(avail!.slots[0]), "HH:mm")}
+                    {format(new Date(displaySlots[0]), "HH:mm")}
                   </button>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                    {avail!.slots.map((s, i) => {
-                      const end = avail!.ends?.[i];
+                    {displaySlots.map((s, i) => {
+                      const end = displayEnds[i];
                       return (
                         <button
                           key={s}
-                          onClick={() => setSlot(s)}
+                          onClick={() => {
+                            setSlot(s);
+                            scrollTo(dataRef);
+                          }}
                           className={cn(
                             "rounded-lg border py-2 text-center text-sm tabular-nums transition-colors hover:border-[var(--brand)]",
                             slot === s && "border-[var(--brand)] bg-[var(--brand)] text-white"
@@ -660,9 +763,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               )}
             </CardContent>
           </Card>
+          </div>
         )}
 
         {slot && (
+          <div ref={dataRef}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">4. Tus datos</CardTitle>
@@ -777,17 +882,39 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   <span>{formatPrice(price)}</span>
                 </div>
               </div>
-              <Button
-                className="w-full bg-[var(--brand)] hover:opacity-90"
-                disabled={!canConfirm || book.isPending}
-                onClick={() => book.mutate(effectiveMethod)}
-              >
-                {book.isPending ? "Confirmando..." : "Confirmar reserva"}
-              </Button>
+              <div className="hidden md:block">
+                <Button
+                  className="w-full bg-[var(--brand)] hover:opacity-90"
+                  disabled={!canConfirm || book.isPending}
+                  onClick={submit}
+                >
+                  {book.isPending ? "Confirmando..." : "Confirmar reserva"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
+          </div>
         )}
       </div>
+
+      {/* Sticky mobile confirm bar */}
+      {slot && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-card p-3 md:hidden">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="font-semibold tabular-nums">{formatPrice(price)}</p>
+            </div>
+            <Button
+              className="flex-1 bg-[var(--brand)] hover:opacity-90"
+              disabled={!canConfirm || book.isPending}
+              onClick={submit}
+            >
+              {book.isPending ? "Confirmando..." : "Confirmar"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {tenant.whatsapp && (
         <a
@@ -795,7 +922,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Consultar por WhatsApp"
-          className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-105"
+          className="fixed bottom-24 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-105 md:bottom-5"
         >
           <MessageCircle className="h-7 w-7" />
         </a>
