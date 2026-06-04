@@ -22,6 +22,7 @@ from app.database import get_db
 from app.models import (
     Booking,
     BookingStatus,
+    Coupon,
     Package,
     PageView,
     PaymentMethod,
@@ -269,6 +270,35 @@ def track_view(slug: str, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
+class CouponCheck(BaseModel):
+    code: str
+
+
+class CouponResult(BaseModel):
+    code: str
+    percent: int
+
+
+def _lookup_coupon(db: Session, tenant_id: int, code: str | None) -> Coupon | None:
+    if not code:
+        return None
+    norm = code.strip().upper().replace(" ", "")
+    return db.scalar(
+        select(Coupon).where(
+            Coupon.tenant_id == tenant_id, Coupon.code == norm, Coupon.active.is_(True)
+        )
+    )
+
+
+@router.post("/{slug}/coupon", response_model=CouponResult)
+def validate_coupon(slug: str, payload: CouponCheck, db: Session = Depends(get_db)) -> CouponResult:
+    tenant = _active_tenant(db, slug)
+    coupon = _lookup_coupon(db, tenant.id, payload.code)
+    if not coupon:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cupón inválido")
+    return CouponResult(code=coupon.code, percent=coupon.percent)
+
+
 class AvailabilityResponse(BaseModel):
     day: date
     service_id: int | None
@@ -359,6 +389,7 @@ def create_public_booking(
     except BookingError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
+    coupon = _lookup_coupon(db, tenant.id, payload.coupon_code)
     booking = Booking(
         tenant_id=tenant.id,
         service_id=service.id if service else None,
@@ -371,6 +402,8 @@ def create_public_booking(
         notes=payload.notes,
         status=BookingStatus.pending,
         payment_method=payment_method,
+        coupon_code=coupon.code if coupon else None,
+        discount_percent=coupon.percent if coupon else 0,
     )
     booking.packages = packages_for(db, payload.package_ids, tenant.id)
     db.add(booking)

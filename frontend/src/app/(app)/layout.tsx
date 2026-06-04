@@ -20,6 +20,7 @@ import {
   Gift,
   Search,
   Bell,
+  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Gestión",
     items: [
       { href: "/clients", label: "Clientes", icon: Contact },
+      { href: "/coupons", label: "Cupones", icon: Ticket, ownerOnly: true },
       { href: "/reports", label: "Reportes", icon: BarChart3, ownerOnly: true, feature: "advanced_reports" },
     ],
   },

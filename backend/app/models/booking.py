@@ -2,7 +2,7 @@ import enum
 import secrets
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,6 +67,9 @@ class Booking(Base):
     )
     # Relative URL of an uploaded transfer receipt (served by the API under /uploads).
     payment_proof_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Discount applied via a coupon code at booking time.
+    coupon_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    discount_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # Set when the automatic "24h before" reminder has been sent (prevents duplicates).
     reminder_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -89,4 +92,5 @@ class Booking(Base):
     @property
     def total_price(self) -> float:
         base = float(self.service.price) if self.service else 0.0
-        return base + sum(float(p.price) for p in self.packages)
+        subtotal = base + sum(float(p.price) for p in self.packages)
+        return round(subtotal * (1 - (self.discount_percent or 0) / 100), 2)

@@ -40,6 +40,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [phone, setPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [packageIds, setPackageIds] = useState<number[]>([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponPercent, setCouponPercent] = useState(0);
   const [done, setDone] = useState(false);
   const [manageCode, setManageCode] = useState<string | null>(null);
   const [view, setView] = useState<"home" | "booking">("home");
@@ -124,6 +126,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           start_datetime: slot,
           payment_method: args.method,
           package_ids: packageIds,
+          coupon_code: couponPercent > 0 ? couponCode : null,
         })
       ).data,
     onSuccess: (data: { public_code: string }) => {
@@ -209,8 +212,26 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   const selectedPackages = tenant.packages.filter((p) => packageIds.includes(p.id));
   const packagesTotal = selectedPackages.reduce((acc, p) => acc + Number(p.price), 0);
-  const price = Number(service?.price ?? 0) + packagesTotal;
+  const subtotal = Number(service?.price ?? 0) + packagesTotal;
+  const price = couponPercent > 0 ? subtotal * (1 - couponPercent / 100) : subtotal;
   const transferAmount = tenant.deposit_percent > 0 ? (price * tenant.deposit_percent) / 100 : price;
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return;
+    try {
+      const { data } = await publicApi.post<{ code: string; percent: number }>(
+        `/public/${slug}/coupon`,
+        { code }
+      );
+      setCouponPercent(data.percent);
+      setCouponCode(data.code);
+      toast.success(`Cupón aplicado: ${data.percent}% de descuento`);
+    } catch {
+      setCouponPercent(0);
+      toast.error("Cupón inválido o vencido");
+    }
+  };
 
   const step1Done = isEvents ? packageIds.length > 0 : !!serviceId;
   const canConfirm =
@@ -939,6 +960,39 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
+              <div className="space-y-2">
+                <Label>¿Tenés un cupón?</Label>
+                {couponPercent > 0 ? (
+                  <div className="flex items-center justify-between rounded-lg border border-[var(--brand)]/40 bg-[var(--brand)]/5 px-3 py-2 text-sm">
+                    <span className="font-medium text-[var(--brand)]">
+                      {couponCode} · {couponPercent}% off
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCouponPercent(0);
+                        setCouponCode("");
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      placeholder="CÓDIGO"
+                      className="max-w-[180px]"
+                    />
+                    <Button type="button" variant="outline" onClick={applyCoupon}>
+                      Aplicar
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5 rounded-lg bg-muted p-3 text-sm">
                 <p>
                   <span className="font-medium">{service?.name}</span> el{" "}
@@ -950,6 +1004,18 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                     <span>{formatPrice(p.price)}</span>
                   </div>
                 ))}
+                {couponPercent > 0 && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal</span>
+                      <span>{formatPrice(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Descuento ({couponPercent}%)</span>
+                      <span>-{formatPrice(subtotal - price)}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between border-t pt-1.5 font-semibold">
                   <span>Total</span>
                   <span>{formatPrice(price)}</span>

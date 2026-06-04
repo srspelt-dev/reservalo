@@ -22,6 +22,7 @@ class BookingCreate(BookingBase):
 
     payment_method: PaymentMethod | None = None
     package_ids: list[int] = Field(default_factory=list)
+    coupon_code: str | None = Field(default=None, max_length=40)
 
 
 class BookingUpdate(BaseModel):
@@ -56,6 +57,8 @@ class BookingOut(BaseModel):
     payment_method: PaymentMethod | None
     payment_status: PaymentStatus
     payment_proof_url: str | None
+    coupon_code: str | None = None
+    discount_percent: int = 0
     packages: list[PackageOut] = Field(default_factory=list)
     total_price: Decimal
     created_at: datetime

@@ -10,6 +10,7 @@ from app.routers import (
     auth,
     bookings,
     clients,
+    coupons,
     dashboard,
     packages,
     plans,
@@ -61,6 +62,6 @@ def health() -> dict:
 
 for r in (
     auth, tenant, users, dashboard, reports, clients, plans,
-    services, resources, schedules, packages, bookings, public,
+    services, resources, schedules, packages, bookings, coupons, public,
 ):
     app.include_router(r.router)

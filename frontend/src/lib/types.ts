@@ -73,6 +73,13 @@ export interface Package {
   created_at: string;
 }
 
+export interface Coupon {
+  id: number;
+  code: string;
+  percent: number;
+  active: boolean;
+}
+
 export interface Schedule {
   id: number;
   resource_id: number;
