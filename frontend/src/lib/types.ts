@@ -111,6 +111,7 @@ export interface Booking {
 export interface DashboardStats {
   bookings_today: number;
   bookings_week: number;
+  bookings_week_prev: number;
   upcoming_bookings: number;
   total_clients: number;
   total_services: number;

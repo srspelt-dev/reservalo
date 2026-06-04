@@ -3,14 +3,31 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { CalendarClock, CalendarCheck, Users, Scissors, Gift, Check, Circle, Inbox } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarCheck,
+  Users,
+  Scissors,
+  Gift,
+  Check,
+  Circle,
+  Inbox,
+  CalendarDays,
+  Plus,
+  Share2,
+  ArrowUpRight,
+  ArrowDownRight,
+  ArrowRight,
+} from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useTenant } from "@/hooks/use-tenant";
+import { useRequireAuth } from "@/hooks/use-auth";
 import { PlanUsage } from "@/components/plan-usage";
 import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,18 +110,39 @@ const ACCENTS: Record<string, string> = {
   amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
 };
 
+function Sparkline({ data }: { data: number[] }) {
+  const max = Math.max(1, ...data);
+  return (
+    <div className="flex h-8 items-end gap-0.5">
+      {data.map((v, i) => (
+        <div
+          key={i}
+          className="w-full rounded-sm bg-primary/25"
+          style={{ height: `${Math.max(8, (v / max) * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function StatCard({
   title,
   value,
   icon: Icon,
   accent = "primary",
+  delta,
+  trend,
 }: {
   title: string;
   value: number;
   icon: React.ElementType;
   accent?: keyof typeof ACCENTS;
+  delta?: number;
+  trend?: number[];
 }) {
   const display = useCountUp(value);
+  const up = delta != null && delta > 0;
+  const down = delta != null && delta < 0;
   return (
     <Card className="transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <CardContent className="p-5">
@@ -124,6 +162,21 @@ function StatCard({
         <p className="mt-3 font-display text-4xl font-bold leading-none tabular-nums text-foreground">
           {display}
         </p>
+        {delta != null && (
+          <p
+            className={cn(
+              "mt-2 flex items-center gap-1 text-xs font-medium",
+              up && "text-emerald-600 dark:text-emerald-400",
+              down && "text-destructive",
+              !up && !down && "text-muted-foreground"
+            )}
+          >
+            {up && <ArrowUpRight className="h-3.5 w-3.5" />}
+            {down && <ArrowDownRight className="h-3.5 w-3.5" />}
+            {delta > 0 ? `+${delta}` : delta} vs. semana pasada
+          </p>
+        )}
+        {trend && <div className="mt-3">{<Sparkline data={trend} />}</div>}
       </CardContent>
     </Card>
   );
@@ -210,6 +263,71 @@ function BookingRow({ b }: { b: DashboardStats["today"][number] }) {
   );
 }
 
+function NextBookingCard({ b }: { b: DashboardStats["upcoming"][number] }) {
+  const start = new Date(b.start_datetime);
+  return (
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-transparent">
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+            <CalendarClock className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+              Próxima reserva
+            </p>
+            <p className="font-display text-lg font-bold leading-tight">{b.client_name}</p>
+            <p className="text-sm capitalize text-muted-foreground">
+              {format(start, "EEEE d 'de' MMMM · HH:mm", { locale: es })}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-medium text-primary">
+            {formatDistanceToNow(start, { addSuffix: true, locale: es })}
+          </p>
+          <div className="mt-1 flex justify-end">
+            <StatusBadge status={b.status} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TodayTimeline({ today }: { today: DashboardStats["today"] }) {
+  return (
+    <div>
+      {today.map((b, i) => (
+        <div key={b.id} className="flex gap-3">
+          <div className="flex w-12 shrink-0 flex-col items-center">
+            <span className="text-sm font-semibold tabular-nums">
+              {format(new Date(b.start_datetime), "HH:mm")}
+            </span>
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full border-2 border-primary bg-background" />
+            {i < today.length - 1 && <span className="w-px flex-1 bg-border" />}
+          </div>
+          <div className="flex flex-1 items-center justify-between pb-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold uppercase text-primary">
+                {b.client_name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-medium leading-tight">{b.client_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(b.start_datetime), "HH:mm")}–
+                  {format(new Date(b.end_datetime), "HH:mm")}
+                </p>
+              </div>
+            </div>
+            <StatusBadge status={b.status} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data, isLoading } = useQuery<DashboardStats>({
     queryKey: ["dashboard"],
@@ -217,7 +335,15 @@ export default function DashboardPage() {
   });
   const { data: sub } = useSubscription();
   const { data: tenant } = useTenant();
+  const { data: user } = useRequireAuth();
   const isEvents = tenant?.booking_mode === "events";
+
+  const shareLink = () => {
+    if (!tenant || typeof window === "undefined") return;
+    const url = `${window.location.origin}/booking/${tenant.slug}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Enlace de reservas copiado");
+  };
 
   if (isLoading || !data) {
     return (
@@ -238,26 +364,49 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">
-            Dashboard
+          <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Hola {user?.name?.split(" ")[0] ?? ""} 👋
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {tenant?.name ? `Resumen de ${tenant.name}` : "Resumen de tu negocio"}
+          <p className="mt-1 text-sm capitalize text-muted-foreground">
+            {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
           </p>
         </div>
-        <Link
-          href="/bookings"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
-        >
-          <CalendarCheck className="h-4 w-4" /> Ver reservas
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={shareLink}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm font-semibold transition hover:bg-accent"
+          >
+            <Share2 className="h-4 w-4" /> Compartir link
+          </button>
+          <Link
+            href="/calendar"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm font-semibold transition hover:bg-accent"
+          >
+            <CalendarDays className="h-4 w-4" /> Calendario
+          </Link>
+          <Link
+            href="/bookings"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" /> Nueva reserva
+          </Link>
+        </div>
       </div>
+
+      {data.upcoming.length > 0 && <NextBookingCard b={data.upcoming[0]} />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Reservas hoy" value={data.bookings_today} icon={CalendarCheck} accent="primary" />
-        <StatCard title="Esta semana" value={data.bookings_week} icon={CalendarClock} accent="success" />
+        <StatCard
+          title="Esta semana"
+          value={data.bookings_week}
+          icon={CalendarClock}
+          accent="success"
+          delta={data.bookings_week - data.bookings_week_prev}
+          trend={data.week.map((d) => d.count)}
+        />
         <StatCard title="Clientes" value={data.total_clients} icon={Users} accent="indigo" />
         {isEvents ? (
           <StatCard title="Paquetes" value={data.total_packages} icon={Gift} accent="amber" />
@@ -284,14 +433,20 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Reservas de hoy</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Agenda de hoy</CardTitle>
+            <Link
+              href="/calendar"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            >
+              Ver calendario <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </CardHeader>
           <CardContent>
             {data.today.length === 0 ? (
               <EmptyState compact icon={CalendarCheck} title="No hay reservas para hoy" description="Cuando entre una reserva para hoy, va a aparecer acá." />
             ) : (
-              data.today.map((b) => <BookingRow key={b.id} b={b} />)
+              <TodayTimeline today={data.today} />
             )}
           </CardContent>
         </Card>

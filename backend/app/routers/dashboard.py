@@ -22,6 +22,7 @@ class DayCount(BaseModel):
 class DashboardStats(BaseModel):
     bookings_today: int
     bookings_week: int
+    bookings_week_prev: int
     upcoming_bookings: int
     total_clients: int
     total_services: int
@@ -120,6 +121,22 @@ def dashboard(
             counts[d] += 1
     week = [DayCount(day=d, count=counts[d]) for d in week_days]
 
+    # Previous week total (for the "vs. semana pasada" comparison).
+    prev_lo = datetime.combine(
+        week_days[0] - timedelta(days=7), datetime.min.time()
+    ).replace(tzinfo=tz)
+    prev_hi = datetime.combine(
+        week_days[0] - timedelta(days=1), datetime.max.time()
+    ).replace(tzinfo=tz)
+    bookings_week_prev = db.scalar(
+        select(func.count(Booking.id)).where(
+            Booking.tenant_id == tid,
+            active,
+            Booking.start_datetime >= prev_lo,
+            Booking.start_datetime <= prev_hi,
+        )
+    ) or 0
+
     recent = list(
         db.scalars(
             select(Booking)
@@ -132,6 +149,7 @@ def dashboard(
     return DashboardStats(
         bookings_today=len(today_bookings),
         bookings_week=len(week_bookings),
+        bookings_week_prev=bookings_week_prev,
         upcoming_bookings=db.scalar(
             select(func.count(Booking.id)).where(
                 Booking.tenant_id == tid, active, Booking.start_datetime > now
