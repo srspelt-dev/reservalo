@@ -84,6 +84,8 @@ class PublicTenant(BaseModel):
     whatsapp: str | None
     location_url: str | None
     photos: list[str]
+    promo_image_url: str | None
+    promo_title: str | None
     accept_cash: bool
     accept_transfer: bool
     payment_alias: str | None
@@ -205,6 +207,8 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         whatsapp=tenant.whatsapp,
         location_url=tenant.location_url,
         photos=tenant.photos or [],
+        promo_image_url=tenant.promo_image_url,
+        promo_title=tenant.promo_title,
         accept_cash=tenant.accept_cash,
         accept_transfer=tenant.accept_transfer,
         payment_alias=tenant.payment_alias,

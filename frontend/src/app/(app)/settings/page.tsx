@@ -31,6 +31,8 @@ interface Form {
   whatsapp: string;
   location_url: string;
   photos: string[];
+  promo_image_url: string;
+  promo_title: string;
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string;
@@ -62,6 +64,8 @@ export default function SettingsPage() {
     whatsapp: "",
     location_url: "",
     photos: [],
+    promo_image_url: "",
+    promo_title: "",
     accept_cash: true,
     accept_transfer: false,
     payment_alias: "",
@@ -90,6 +94,8 @@ export default function SettingsPage() {
         whatsapp: tenant.whatsapp ?? "",
         location_url: tenant.location_url ?? "",
         photos: tenant.photos ?? [],
+        promo_image_url: tenant.promo_image_url ?? "",
+        promo_title: tenant.promo_title ?? "",
         accept_cash: tenant.accept_cash,
         accept_transfer: tenant.accept_transfer,
         payment_alias: tenant.payment_alias ?? "",
@@ -125,6 +131,8 @@ export default function SettingsPage() {
         whatsapp: form.whatsapp || null,
         location_url: form.location_url || null,
         photos: form.photos.map((p) => p.trim()).filter(Boolean),
+        promo_image_url: form.promo_image_url || null,
+        promo_title: form.promo_title || null,
         payment_alias: form.payment_alias || null,
         payment_instructions: form.payment_instructions || null,
       }),
@@ -375,6 +383,43 @@ export default function SettingsPage() {
               >
                 <Plus className="h-4 w-4" /> Agregar foto
               </Button>
+            )}
+            <p className="text-xs text-muted-foreground">
+              La primera foto se usa como fondo de tu página pública.
+            </p>
+          </div>
+
+          <div className="space-y-3 rounded-xl border p-4">
+            <div>
+              <Label>Promoción (pop-up al entrar)</Label>
+              <p className="text-xs text-muted-foreground">
+                Si cargás una imagen, al abrir tu link aparece un aviso con esta promo y un botón
+                "Aceptar". Dejala vacía para no mostrar nada.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Título</Label>
+              <Input
+                value={form.promo_title}
+                onChange={(e) => set("promo_title", e.target.value)}
+                placeholder="Ej: ¡20% off esta semana!"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Imagen (URL)</Label>
+              <Input
+                value={form.promo_image_url}
+                onChange={(e) => set("promo_image_url", e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            {form.promo_image_url.trim() && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={form.promo_image_url}
+                alt="Vista previa de la promo"
+                className="max-h-48 w-full rounded-lg border object-contain"
+              />
             )}
           </div>
         </CardContent>

@@ -76,6 +76,26 @@
   }
 }
 
+/* Heartbeat pulse for the public "Reservar ahora" CTA. Transform-only so it inherits
+   the tenant brand color; the global reduced-motion block below disables it. */
+@keyframes heartbeat {
+  0%,
+  40%,
+  100% {
+    transform: scale(1);
+  }
+  10%,
+  30% {
+    transform: scale(1.035);
+  }
+  20% {
+    transform: scale(1);
+  }
+}
+.animate-heartbeat {
+  animation: heartbeat 2.4s ease-in-out infinite;
+}
+
 /* Subtle dotted canvas background for auth screens (adapts to theme via --border). */
 .auth-canvas {
   background-image: radial-gradient(hsl(var(--border)) 0.6px, transparent 0.6px);

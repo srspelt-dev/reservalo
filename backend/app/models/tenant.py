@@ -29,6 +29,9 @@ class Tenant(Base):
     location_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Gallery of photo URLs shown on the public presentation page.
     photos: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    # Optional promo shown as a pop-up when a visitor opens the public link.
+    promo_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    promo_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Payment configuration (no gateway — alias/transfer + pay-at-venue)
     accept_cash: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

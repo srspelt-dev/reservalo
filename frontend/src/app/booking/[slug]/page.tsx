@@ -12,6 +12,7 @@ import {
   CalendarPlus,
   Zap,
   Clock,
+  ArrowRight,
 } from "lucide-react";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -41,6 +42,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [done, setDone] = useState(false);
   const [manageCode, setManageCode] = useState<string | null>(null);
   const [view, setView] = useState<"home" | "booking">("home");
+  const [promoOpen, setPromoOpen] = useState(true);
 
   // Auto-advance: scroll to the next step when the current one is completed.
   const resourceRef = useRef<HTMLDivElement>(null);
@@ -394,80 +396,77 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   // ---- Presentation (link-in-bio) view ----
   if (view === "home") {
+    const cover = tenant.photos[0];
+    const showPromo = !!tenant.promo_image_url && promoOpen;
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-muted/40 p-4"
+        className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-5"
         style={brandStyle}
       >
-        <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-300">
-          <div className="rounded-3xl border bg-card p-8 text-center shadow-card">
+        {/* Immersive background */}
+        {cover ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/45 to-black/80" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-[var(--brand)] via-[var(--brand)] to-slate-900 opacity-95" />
+        )}
+
+        <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 duration-500">
+          <div className="rounded-[28px] border border-white/20 bg-white/10 p-7 text-center shadow-2xl backdrop-blur-xl">
             {tenant.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={tenant.logo_url}
                 alt={tenant.name}
-                className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-sm"
+                className="mx-auto h-24 w-24 rounded-2xl border-4 border-white/80 bg-white object-cover shadow-lg"
               />
             ) : (
-              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--brand)]/10 text-[var(--brand)]">
+              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-white text-[var(--brand)] shadow-lg">
                 <CalendarCheck className="h-12 w-12" />
               </div>
             )}
-            <h1 className="mt-5 text-2xl font-bold tracking-tight">{tenant.name}</h1>
+            <h1 className="mt-4 font-display text-2xl font-extrabold tracking-tight text-white drop-shadow-sm">
+              {tenant.name}
+            </h1>
             {tenant.description && (
-              <p className="mt-1 text-muted-foreground">{tenant.description}</p>
+              <p className="mt-1 text-sm text-white/85">{tenant.description}</p>
             )}
 
             {hasHours && (
               <div className="mt-3 flex justify-center">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium",
-                    tenant.is_open_now
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white backdrop-blur">
                   <span
                     className={cn(
                       "h-2 w-2 rounded-full",
-                      tenant.is_open_now ? "bg-emerald-500" : "bg-muted-foreground/50"
+                      tenant.is_open_now ? "bg-emerald-400" : "bg-white/50"
                     )}
                   />
                   {tenant.is_open_now
                     ? tenant.closes_at
-                      ? `Abierto ahora · cierra ${tenant.closes_at}`
+                      ? `Abierto · cierra ${tenant.closes_at}`
                       : "Abierto ahora"
                     : "Cerrado ahora"}
                 </span>
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <Zap className="h-3.5 w-3.5 text-[var(--brand)]" /> Reserva al instante
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Check className="h-3.5 w-3.5 text-[var(--brand)]" /> Sin llamadas
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <CalendarCheck className="h-3.5 w-3.5 text-[var(--brand)]" /> Recordatorio
-              </span>
-            </div>
-
-            <div className="mt-7 space-y-3">
+            <div className="mt-6 space-y-3">
               <button
                 onClick={() => setView("booking")}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] font-semibold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+                className="animate-heartbeat flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--brand)] text-base font-bold text-white shadow-xl shadow-black/20 transition-transform hover:scale-[1.02]"
               >
-                <CalendarCheck className="h-5 w-5" /> Reservar / Agendar
+                <CalendarCheck className="h-5 w-5" /> Reservar ahora
+                <ArrowRight className="h-5 w-5" />
               </button>
               {tenant.location_url && (
                 <a
                   href={tenant.location_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border bg-background font-semibold transition-colors hover:border-[var(--brand)]"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/90 font-semibold text-slate-800 backdrop-blur transition hover:bg-white"
                 >
                   <MapPin className="h-5 w-5" /> Ubicación
                 </a>
@@ -477,30 +476,16 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                   href={waUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border bg-background font-semibold transition-colors hover:border-[#25D366] hover:text-[#1ebe57]"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/90 font-semibold text-slate-800 backdrop-blur transition hover:bg-white"
                 >
                   <MessageCircle className="h-5 w-5 text-[#25D366]" /> WhatsApp
                 </a>
               )}
             </div>
 
-            {tenant.photos.length > 0 && (
-              <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-                {tenant.photos.map((url, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={i}
-                    src={url}
-                    alt=""
-                    className="h-28 w-40 shrink-0 rounded-xl border object-cover"
-                  />
-                ))}
-              </div>
-            )}
-
             {hasHours && (
-              <details className="mt-4 text-left">
-                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              <details className="mt-5 text-left text-white/90">
+                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-sm font-medium text-white/80 hover:text-white">
                   <Clock className="h-4 w-4" /> Ver horarios
                 </summary>
                 <div className="mt-3 space-y-1 text-sm">
@@ -509,23 +494,48 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                       key={d.day}
                       className={cn(
                         "flex justify-between",
-                        d.day === todayDow && "font-semibold text-foreground"
+                        d.day === todayDow ? "font-semibold text-white" : "text-white/80"
                       )}
                     >
                       <span>{DAY_NAMES[d.day]}</span>
-                      <span className={d.ranges.length ? "" : "text-muted-foreground"}>
-                        {d.ranges.length ? d.ranges.join(", ") : "Cerrado"}
-                      </span>
+                      <span>{d.ranges.length ? d.ranges.join(", ") : "Cerrado"}</span>
                     </div>
                   ))}
                 </div>
               </details>
             )}
           </div>
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            powered by <span className="font-semibold text-foreground">Reservalo</span>
+          <p className="mt-5 text-center text-xs text-white/70">
+            powered by <span className="font-semibold text-white">Reservalo</span>
           </p>
         </div>
+
+        {/* Promo pop-up */}
+        {showPromo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 animate-in fade-in">
+            <div className="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              <p className="px-6 pt-6 text-center font-display text-lg font-bold text-[var(--brand)]">
+                {tenant.promo_title || "¡Promoción recomendada para ti!"}
+              </p>
+              <div className="p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={tenant.promo_image_url!}
+                  alt={tenant.promo_title || "Promoción"}
+                  className="w-full rounded-2xl object-cover"
+                />
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => setPromoOpen(false)}
+                  className="h-12 w-full rounded-2xl bg-[var(--brand)] font-semibold text-white transition hover:opacity-90"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

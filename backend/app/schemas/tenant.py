@@ -35,6 +35,8 @@ class TenantOut(BaseModel):
     whatsapp: str | None
     location_url: str | None
     photos: list[str]
+    promo_image_url: str | None
+    promo_title: str | None
     # Payments
     accept_cash: bool
     accept_transfer: bool
@@ -59,6 +61,8 @@ class TenantUpdate(BaseModel):
     whatsapp: str | None = Field(default=None, max_length=30)
     location_url: str | None = Field(default=None, max_length=500)
     photos: list[str] | None = Field(default=None, max_length=12)
+    promo_image_url: str | None = Field(default=None, max_length=500)
+    promo_title: str | None = Field(default=None, max_length=255)
     accept_cash: bool | None = None
     accept_transfer: bool | None = None
     payment_alias: str | None = Field(default=None, max_length=255)

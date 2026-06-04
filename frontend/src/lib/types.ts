@@ -29,6 +29,8 @@ export interface Tenant {
   whatsapp: string | null;
   location_url: string | null;
   photos: string[];
+  promo_image_url: string | null;
+  promo_title: string | null;
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string | null;
@@ -185,6 +187,8 @@ export interface PublicTenant {
   whatsapp: string | null;
   location_url: string | null;
   photos: string[];
+  promo_image_url: string | null;
+  promo_title: string | null;
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string | null;
