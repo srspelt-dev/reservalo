@@ -1,6 +1,7 @@
 import os
 import secrets
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import (
     APIRouter,
@@ -18,7 +19,16 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Booking, BookingStatus, Package, PaymentMethod, Resource, Service, Tenant
+from app.models import (
+    Booking,
+    BookingStatus,
+    Package,
+    PaymentMethod,
+    Resource,
+    Schedule,
+    Service,
+    Tenant,
+)
 from app.routers.packages import packages_for
 from app.schemas.booking import BookingCreate, BookingOut
 from app.schemas.package import PackageOut
@@ -60,6 +70,11 @@ _MANAGEABLE = (BookingStatus.pending, BookingStatus.confirmed)
 router = APIRouter(prefix="/public", tags=["public"])
 
 
+class DayHours(BaseModel):
+    day: int  # 0 = Monday ... 6 = Sunday
+    ranges: list[str]  # e.g. ["09:00–13:00", "15:00–18:00"]
+
+
 class PublicTenant(BaseModel):
     name: str
     slug: str
@@ -68,6 +83,7 @@ class PublicTenant(BaseModel):
     brand_color: str
     whatsapp: str | None
     location_url: str | None
+    photos: list[str]
     accept_cash: bool
     accept_transfer: bool
     payment_alias: str | None
@@ -75,9 +91,77 @@ class PublicTenant(BaseModel):
     deposit_percent: int
     booking_mode: str
     event_duration_minutes: int
+    # Business hours (merged across resources) + live open/closed state
+    weekly_hours: list[DayHours]
+    is_open_now: bool
+    closes_at: str | None
     services: list[ServiceOut]
     resources: list[ResourceOut]
     packages: list[PackageOut]
+
+
+def _fmt_minutes(m: int) -> str:
+    h = (m // 60) % 24
+    return f"{h:02d}:{m % 60:02d}"
+
+
+def _business_hours(db: Session, tenant: Tenant) -> tuple[list[DayHours], bool, str | None]:
+    """Merge every active resource's weekly schedule into per-day opening ranges and
+    compute whether the business is open right now (in its own timezone)."""
+    rows = db.execute(
+        select(Schedule.day_of_week, Schedule.start_time, Schedule.end_time)
+        .join(Resource, Schedule.resource_id == Resource.id)
+        .where(Resource.tenant_id == tenant.id, Resource.active.is_(True))
+    ).all()
+
+    # Collect intervals per day in minutes; windows ending at/under their start wrap past midnight.
+    by_day: dict[int, list[tuple[int, int]]] = {d: [] for d in range(7)}
+    for dow, start, end in rows:
+        start = start if isinstance(start, time) else time.fromisoformat(str(start))
+        end = end if isinstance(end, time) else time.fromisoformat(str(end))
+        sm = start.hour * 60 + start.minute
+        em = end.hour * 60 + end.minute
+        if em <= sm:
+            em += 1440
+        by_day[dow].append((sm, em))
+
+    merged: dict[int, list[tuple[int, int]]] = {}
+    for d, intervals in by_day.items():
+        intervals.sort()
+        out: list[tuple[int, int]] = []
+        for s, e in intervals:
+            if out and s <= out[-1][1]:
+                out[-1] = (out[-1][0], max(out[-1][1], e))
+            else:
+                out.append((s, e))
+        merged[d] = out
+
+    weekly = [
+        DayHours(day=d, ranges=[f"{_fmt_minutes(s)}–{_fmt_minutes(e)}" for s, e in merged[d]])
+        for d in range(7)
+    ]
+
+    # Open-now check in the tenant timezone.
+    try:
+        now = datetime.now(ZoneInfo(tenant.timezone))
+    except Exception:  # noqa: BLE001 - bad tz falls back to UTC
+        now = datetime.now(timezone.utc)
+    dow = now.weekday()
+    cur = now.hour * 60 + now.minute
+    is_open = False
+    closes_at: str | None = None
+    for s, e in merged[dow]:
+        if s <= cur < e:
+            is_open = True
+            closes_at = _fmt_minutes(e)
+            break
+    if not is_open:  # a window from the previous day may still be running past midnight
+        for s, e in merged[(dow - 1) % 7]:
+            if e > 1440 and cur < (e - 1440):
+                is_open = True
+                closes_at = _fmt_minutes(e)
+                break
+    return weekly, is_open, closes_at
 
 
 def _active_tenant(db: Session, slug: str) -> Tenant:
@@ -111,6 +195,7 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
             .order_by(Package.name)
         )
     )
+    weekly_hours, is_open_now, closes_at = _business_hours(db, tenant)
     return PublicTenant(
         name=tenant.name,
         slug=tenant.slug,
@@ -119,6 +204,7 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         brand_color=tenant.brand_color,
         whatsapp=tenant.whatsapp,
         location_url=tenant.location_url,
+        photos=tenant.photos or [],
         accept_cash=tenant.accept_cash,
         accept_transfer=tenant.accept_transfer,
         payment_alias=tenant.payment_alias,
@@ -126,6 +212,9 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         deposit_percent=tenant.deposit_percent,
         booking_mode=tenant.booking_mode,
         event_duration_minutes=tenant.event_duration_minutes,
+        weekly_hours=weekly_hours,
+        is_open_now=is_open_now,
+        closes_at=closes_at,
         services=[ServiceOut.model_validate(s) for s in services],
         resources=[ResourceOut.model_validate(r) for r in resources],
         packages=[PackageOut.model_validate(p) for p in pkgs],

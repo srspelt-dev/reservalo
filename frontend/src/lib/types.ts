@@ -27,6 +27,7 @@ export interface Tenant {
   brand_color: string;
   whatsapp: string | null;
   location_url: string | null;
+  photos: string[];
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string | null;
@@ -181,6 +182,7 @@ export interface PublicTenant {
   brand_color: string;
   whatsapp: string | null;
   location_url: string | null;
+  photos: string[];
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string | null;
@@ -188,6 +190,9 @@ export interface PublicTenant {
   deposit_percent: number;
   booking_mode: string;
   event_duration_minutes: number;
+  weekly_hours: { day: number; ranges: string[] }[];
+  is_open_now: boolean;
+  closes_at: string | null;
   services: Service[];
   resources: Resource[];
   packages: Package[];

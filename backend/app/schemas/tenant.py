@@ -34,6 +34,7 @@ class TenantOut(BaseModel):
     brand_color: str
     whatsapp: str | None
     location_url: str | None
+    photos: list[str]
     # Payments
     accept_cash: bool
     accept_transfer: bool
@@ -57,6 +58,7 @@ class TenantUpdate(BaseModel):
     brand_color: str | None = Field(default=None, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
     whatsapp: str | None = Field(default=None, max_length=30)
     location_url: str | None = Field(default=None, max_length=500)
+    photos: list[str] | None = Field(default=None, max_length=12)
     accept_cash: bool | None = None
     accept_transfer: bool | None = None
     payment_alias: str | None = Field(default=None, max_length=255)

@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   CalendarPlus,
   Zap,
+  Clock,
 } from "lucide-react";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -97,6 +98,10 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(
     `Hola ${tenant.name}, quiero hacer una consulta.`
   )}`;
+  // Business hours: server computes is_open_now/closes_at in the tenant timezone.
+  const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  const hasHours = tenant.weekly_hours?.some((d) => d.ranges.length > 0) ?? false;
+  const todayDow = (new Date().getDay() + 6) % 7; // JS Sunday=0 → Monday=0
   const service = tenant.services.find((s) => s.id === serviceId);
   // If the service maps specific resources, only offer those.
   const allowedResources =
@@ -342,6 +347,31 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               <p className="mt-1 text-muted-foreground">{tenant.description}</p>
             )}
 
+            {hasHours && (
+              <div className="mt-3 flex justify-center">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium",
+                    tenant.is_open_now
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      tenant.is_open_now ? "bg-emerald-500" : "bg-muted-foreground/50"
+                    )}
+                  />
+                  {tenant.is_open_now
+                    ? tenant.closes_at
+                      ? `Abierto ahora · cierra ${tenant.closes_at}`
+                      : "Abierto ahora"
+                    : "Cerrado ahora"}
+                </span>
+              </div>
+            )}
+
             <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Zap className="h-3.5 w-3.5 text-[var(--brand)]" /> Reserva al instante
@@ -382,6 +412,44 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 </a>
               )}
             </div>
+
+            {tenant.photos.length > 0 && (
+              <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+                {tenant.photos.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={url}
+                    alt=""
+                    className="h-28 w-40 shrink-0 rounded-xl border object-cover"
+                  />
+                ))}
+              </div>
+            )}
+
+            {hasHours && (
+              <details className="mt-4 text-left">
+                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+                  <Clock className="h-4 w-4" /> Ver horarios
+                </summary>
+                <div className="mt-3 space-y-1 text-sm">
+                  {tenant.weekly_hours.map((d) => (
+                    <div
+                      key={d.day}
+                      className={cn(
+                        "flex justify-between",
+                        d.day === todayDow && "font-semibold text-foreground"
+                      )}
+                    >
+                      <span>{DAY_NAMES[d.day]}</span>
+                      <span className={d.ranges.length ? "" : "text-muted-foreground"}>
+                        {d.ranges.length ? d.ranges.join(", ") : "Cerrado"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
           <p className="mt-6 text-center text-xs text-muted-foreground">
             powered by <span className="font-semibold text-foreground">Reservalo</span>

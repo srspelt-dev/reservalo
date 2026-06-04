@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "@/lib/api";
 import { TIMEZONES } from "@/lib/utils";
@@ -28,6 +28,7 @@ interface Form {
   brand_color: string;
   whatsapp: string;
   location_url: string;
+  photos: string[];
   accept_cash: boolean;
   accept_transfer: boolean;
   payment_alias: string;
@@ -58,6 +59,7 @@ export default function SettingsPage() {
     brand_color: "#2563eb",
     whatsapp: "",
     location_url: "",
+    photos: [],
     accept_cash: true,
     accept_transfer: false,
     payment_alias: "",
@@ -85,6 +87,7 @@ export default function SettingsPage() {
         brand_color: tenant.brand_color,
         whatsapp: tenant.whatsapp ?? "",
         location_url: tenant.location_url ?? "",
+        photos: tenant.photos ?? [],
         accept_cash: tenant.accept_cash,
         accept_transfer: tenant.accept_transfer,
         payment_alias: tenant.payment_alias ?? "",
@@ -109,6 +112,7 @@ export default function SettingsPage() {
         logo_url: form.logo_url || null,
         whatsapp: form.whatsapp || null,
         location_url: form.location_url || null,
+        photos: form.photos.map((p) => p.trim()).filter(Boolean),
         payment_alias: form.payment_alias || null,
         payment_instructions: form.payment_instructions || null,
       }),
@@ -284,6 +288,59 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-muted-foreground">Botón "Ubicación" en tu página.</p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Fotos del local</Label>
+            <p className="text-xs text-muted-foreground">
+              Pegá la URL de cada foto (subila a un servicio de imágenes y copiá el link). Se
+              muestran en tu página pública. Hasta 12.
+            </p>
+            <div className="space-y-2">
+              {form.photos.map((url, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {url.trim() ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-md border object-cover"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 shrink-0 rounded-md border bg-muted" />
+                  )}
+                  <Input
+                    value={url}
+                    placeholder="https://..."
+                    onChange={(e) =>
+                      set(
+                        "photos",
+                        form.photos.map((p, j) => (j === i ? e.target.value : p))
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Quitar foto"
+                    onClick={() => set("photos", form.photos.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {form.photos.length < 12 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => set("photos", [...form.photos, ""])}
+              >
+                <Plus className="h-4 w-4" /> Agregar foto
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

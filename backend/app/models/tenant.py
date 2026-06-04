@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,6 +27,8 @@ class Tenant(Base):
     # Contact / link-in-bio actions for the public page
     whatsapp: Mapped[str | None] = mapped_column(String(30), nullable=True)
     location_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Gallery of photo URLs shown on the public presentation page.
+    photos: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
 
     # Payment configuration (no gateway — alias/transfer + pay-at-venue)
     accept_cash: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
