@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useRequireAuth, logout } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useTenant } from "@/hooks/use-tenant";
 
 function VerifyBanner() {
   async function resend() {
@@ -47,31 +48,74 @@ function VerifyBanner() {
   );
 }
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendario", icon: CalendarDays },
-  { href: "/bookings", label: "Reservas", icon: ListChecks },
-  { href: "/services", label: "Servicios", icon: Scissors },
-  { href: "/resources", label: "Recursos", icon: Boxes },
-  { href: "/packages", label: "Paquetes", icon: Gift },
-  { href: "/schedules", label: "Horarios", icon: Clock },
-  { href: "/clients", label: "Clientes", icon: Contact },
-  { href: "/reports", label: "Reportes", icon: BarChart3, ownerOnly: true, feature: "advanced_reports" },
-  { href: "/users", label: "Usuarios", icon: Users, ownerOnly: true },
-  { href: "/subscription", label: "Plan", icon: CreditCard, ownerOnly: true },
-  { href: "/settings", label: "Configuración", icon: Settings },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  ownerOnly?: boolean;
+  feature?: string;
+  // Only show this item in the given booking mode. Omitted = show in both.
+  mode?: "appointments" | "events";
+  // Optional label override when the tenant is in "events" mode.
+  eventsLabel?: string;
+};
+
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Principal",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/calendar", label: "Calendario", icon: CalendarDays },
+      { href: "/bookings", label: "Reservas", icon: ListChecks },
+    ],
+  },
+  {
+    title: "Catálogo",
+    items: [
+      { href: "/services", label: "Servicios", icon: Scissors, mode: "appointments" },
+      { href: "/packages", label: "Paquetes", icon: Gift, mode: "events" },
+      { href: "/resources", label: "Recursos", icon: Boxes, eventsLabel: "Salones" },
+      { href: "/schedules", label: "Horarios", icon: Clock },
+    ],
+  },
+  {
+    title: "Gestión",
+    items: [
+      { href: "/clients", label: "Clientes", icon: Contact },
+      { href: "/reports", label: "Reportes", icon: BarChart3, ownerOnly: true, feature: "advanced_reports" },
+    ],
+  },
+  {
+    title: "Cuenta",
+    items: [
+      { href: "/users", label: "Usuarios", icon: Users, ownerOnly: true },
+      { href: "/subscription", label: "Plan", icon: CreditCard, ownerOnly: true },
+      { href: "/settings", label: "Configuración", icon: Settings },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: user, isLoading } = useRequireAuth();
   const { data: sub } = useSubscription();
+  const { data: tenant } = useTenant();
   const features = sub?.features ?? [];
-  const nav = NAV.filter(
-    (item) =>
-      (!item.ownerOnly || user?.role === "owner") &&
-      (!item.feature || features.includes(item.feature))
+  const mode = tenant?.booking_mode === "events" ? "events" : "appointments";
+
+  const visible = (item: NavItem) =>
+    (!item.ownerOnly || user?.role === "owner") &&
+    (!item.feature || features.includes(item.feature)) &&
+    (!item.mode || item.mode === mode);
+
+  const labelFor = (item: NavItem) =>
+    mode === "events" && item.eventsLabel ? item.eventsLabel : item.label;
+
+  // Grouped (desktop) and flattened (mobile) views of the filtered nav.
+  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter(visible) })).filter(
+    (g) => g.items.length > 0
   );
+  const flatNav = groups.flatMap((g) => g.items);
 
   if (isLoading || !user) {
     return (
@@ -93,25 +137,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-muted-foreground">Panel de gestión</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
-          {nav.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )}
-              >
-                <Icon className="h-[18px] w-[18px]" />
-                {label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-1">
+          {groups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                {group.title}
+              </p>
+              {group.items.map((item) => {
+                const { href, icon: Icon } = item;
+                const active = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px]" />
+                    {labelFor(item)}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="border-t p-3">
           <div className="mb-2 flex items-center gap-2 px-1">
@@ -142,7 +194,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
           <nav className="flex gap-1 overflow-x-auto border-b bg-card px-2 py-2">
-            {nav.map(({ href, label, icon: Icon }) => {
+            {flatNav.map((item) => {
+              const { href, icon: Icon } = item;
               const active = pathname === href;
               return (
                 <Link
@@ -156,7 +209,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  {label}
+                  {labelFor(item)}
                 </Link>
               );
             })}
