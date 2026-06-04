@@ -13,6 +13,7 @@ import {
   Zap,
   Clock,
   ArrowRight,
+  Star,
 } from "lucide-react";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -448,6 +449,26 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               <p className="mt-1 text-sm text-white/85">{tenant.description}</p>
             )}
 
+            {tenant.rating_count > 0 && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-sm text-white">
+                <span className="flex">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={cn(
+                        "h-4 w-4",
+                        n <= Math.round(tenant.rating_avg ?? 0)
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-white/40"
+                      )}
+                    />
+                  ))}
+                </span>
+                <span className="font-semibold">{tenant.rating_avg}</span>
+                <span className="text-white/70">({tenant.rating_count})</span>
+              </div>
+            )}
+
             {hasHours && (
               <div className="mt-3 flex justify-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white backdrop-blur">
@@ -512,6 +533,35 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                     >
                       <span>{DAY_NAMES[d.day]}</span>
                       <span>{d.ranges.length ? d.ranges.join(", ") : "Cerrado"}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {tenant.reviews.length > 0 && (
+              <details className="mt-3 text-left text-white/90">
+                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-sm font-medium text-white/80 hover:text-white">
+                  <Star className="h-4 w-4" /> Ver opiniones
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {tenant.reviews.map((r, i) => (
+                    <div key={i} className="rounded-xl bg-white/10 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white">{r.client_name}</span>
+                        <span className="flex">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                n <= r.rating ? "fill-amber-400 text-amber-400" : "text-white/30"
+                              )}
+                            />
+                          ))}
+                        </span>
+                      </div>
+                      {r.comment && <p className="mt-1 text-sm text-white/85">{r.comment}</p>}
                     </div>
                   ))}
                 </div>

@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, X } from "lucide-react";
+import { CalendarClock, Check, X, Star } from "lucide-react";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import type { PublicBookingDetail } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -26,6 +27,8 @@ export default function ManageBookingPage({
   const [rescheduling, setRescheduling] = useState(false);
   const [day, setDay] = useState(format(new Date(), "yyyy-MM-dd"));
   const [slot, setSlot] = useState<string | null>(null);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
 
   const key = ["public-booking", slug, code];
 
@@ -67,6 +70,19 @@ export default function ManageBookingPage({
       setRescheduling(false);
       setSlot(null);
       toast.success("Reserva reprogramada");
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const review = useMutation({
+    mutationFn: () =>
+      publicApi.post(`/public/${slug}/booking/${code}/review`, {
+        rating,
+        comment: comment || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key });
+      toast.success("¡Gracias por tu opinión! ⭐");
     },
     onError: (e) => toast.error(apiError(e)),
   });
@@ -257,6 +273,52 @@ export default function ManageBookingPage({
                   <Check className="h-4 w-4" /> Confirmar cambio
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {booking.reviewed && (
+          <p className="text-center text-sm text-muted-foreground">
+            ¡Gracias por dejar tu opinión! ⭐
+          </p>
+        )}
+
+        {booking.can_review && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">¿Cómo estuvo tu experiencia?</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    aria-label={`${n} estrellas`}
+                    onClick={() => setRating(n)}
+                  >
+                    <Star
+                      className={cn(
+                        "h-8 w-8 transition-colors",
+                        n <= rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+              <Textarea
+                placeholder="Contanos cómo te fue (opcional)"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                maxLength={1000}
+              />
+              <Button
+                className="w-full"
+                disabled={rating === 0 || review.isPending}
+                onClick={() => review.mutate()}
+              >
+                Enviar opinión
+              </Button>
             </CardContent>
           </Card>
         )}

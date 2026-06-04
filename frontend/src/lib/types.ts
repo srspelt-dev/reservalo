@@ -200,6 +200,9 @@ export interface PublicTenant {
   weekly_hours: { day: number; ranges: string[] }[];
   is_open_now: boolean;
   closes_at: string | null;
+  rating_avg: number | null;
+  rating_count: number;
+  reviews: { rating: number; comment: string | null; client_name: string; created_at: string }[];
   services: Service[];
   resources: Resource[];
   packages: Package[];
@@ -222,4 +225,6 @@ export interface PublicBookingDetail {
   accept_transfer: boolean;
   payment_alias: string | null;
   can_manage: boolean;
+  can_review: boolean;
+  reviewed: boolean;
 }

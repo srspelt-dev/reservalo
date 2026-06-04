@@ -13,7 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.models import (
     PageView,
     PaymentMethod,
     Resource,
+    Review,
     Schedule,
     Service,
     Tenant,
@@ -77,6 +78,15 @@ class DayHours(BaseModel):
     ranges: list[str]  # e.g. ["09:00–13:00", "15:00–18:00"]
 
 
+class ReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rating: int
+    comment: str | None
+    client_name: str
+    created_at: datetime
+
+
 class PublicTenant(BaseModel):
     name: str
     slug: str
@@ -99,6 +109,10 @@ class PublicTenant(BaseModel):
     weekly_hours: list[DayHours]
     is_open_now: bool
     closes_at: str | None
+    # Reviews
+    rating_avg: float | None
+    rating_count: int
+    reviews: list[ReviewOut]
     services: list[ServiceOut]
     resources: list[ResourceOut]
     packages: list[PackageOut]
@@ -200,6 +214,16 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         )
     )
     weekly_hours, is_open_now, closes_at = _business_hours(db, tenant)
+
+    review_rows = list(
+        db.scalars(
+            select(Review).where(Review.tenant_id == tenant.id).order_by(Review.created_at.desc())
+        )
+    )
+    rating_count = len(review_rows)
+    rating_avg = round(sum(r.rating for r in review_rows) / rating_count, 1) if rating_count else None
+    reviews_out = [ReviewOut.model_validate(r) for r in review_rows if r.comment][:6]
+
     return PublicTenant(
         name=tenant.name,
         slug=tenant.slug,
@@ -221,6 +245,9 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         weekly_hours=weekly_hours,
         is_open_now=is_open_now,
         closes_at=closes_at,
+        rating_avg=rating_avg,
+        rating_count=rating_count,
+        reviews=reviews_out,
         services=[ServiceOut.model_validate(s) for s in services],
         resources=[ResourceOut.model_validate(r) for r in resources],
         packages=[PackageOut.model_validate(p) for p in pkgs],
@@ -377,10 +404,17 @@ class PublicBookingDetail(BaseModel):
     accept_transfer: bool
     payment_alias: str | None
     can_manage: bool
+    can_review: bool
+    reviewed: bool
 
 
 class RescheduleRequest(BaseModel):
     start_datetime: datetime
+
+
+class ReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 def _get_managed_booking(db: Session, tenant: Tenant, code: str) -> Booking:
@@ -396,6 +430,10 @@ def _detail(db: Session, tenant: Tenant, booking: Booking) -> PublicBookingDetai
     service = db.get(Service, booking.service_id)
     resource = db.get(Resource, booking.resource_id)
     is_future = booking.start_datetime > datetime.now(timezone.utc)
+    reviewed = (
+        db.scalar(select(Review.id).where(Review.booking_id == booking.id)) is not None
+    )
+    can_review = (not is_future) and booking.status != BookingStatus.cancelled and not reviewed
     return PublicBookingDetail(
         public_code=booking.public_code,
         status=booking.status,
@@ -413,6 +451,8 @@ def _detail(db: Session, tenant: Tenant, booking: Booking) -> PublicBookingDetai
         accept_transfer=tenant.accept_transfer,
         payment_alias=tenant.payment_alias,
         can_manage=booking.status in _MANAGEABLE and is_future,
+        can_review=can_review,
+        reviewed=reviewed,
     )
 
 
@@ -420,6 +460,31 @@ def _detail(db: Session, tenant: Tenant, booking: Booking) -> PublicBookingDetai
 def get_public_booking(slug: str, code: str, db: Session = Depends(get_db)) -> PublicBookingDetail:
     tenant = _active_tenant(db, slug)
     booking = _get_managed_booking(db, tenant, code)
+    return _detail(db, tenant, booking)
+
+
+@router.post("/{slug}/booking/{code}/review", response_model=PublicBookingDetail)
+def create_review(
+    slug: str, code: str, payload: ReviewCreate, db: Session = Depends(get_db)
+) -> PublicBookingDetail:
+    tenant = _active_tenant(db, slug)
+    booking = _get_managed_booking(db, tenant, code)
+    if booking.start_datetime > datetime.now(timezone.utc):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Solo podés opinar después de tu turno")
+    if booking.status == BookingStatus.cancelled:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Una reserva cancelada no se puede calificar")
+    if db.scalar(select(Review.id).where(Review.booking_id == booking.id)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya dejaste tu opinión, ¡gracias!")
+    db.add(
+        Review(
+            tenant_id=tenant.id,
+            booking_id=booking.id,
+            rating=payload.rating,
+            comment=(payload.comment or None),
+            client_name=booking.client_name,
+        )
+    )
+    db.commit()
     return _detail(db, tenant, booking)
 
 
