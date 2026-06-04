@@ -23,6 +23,7 @@ from app.models import (
     Booking,
     BookingStatus,
     Package,
+    PageView,
     PaymentMethod,
     Resource,
     Schedule,
@@ -39,6 +40,7 @@ from app.services.availability import (
     available_slots,
     commit_or_conflict,
     event_slots,
+    get_zone,
     validate_booking,
     validate_event_booking,
 )
@@ -223,6 +225,21 @@ def public_tenant(slug: str, db: Session = Depends(get_db)) -> PublicTenant:
         resources=[ResourceOut.model_validate(r) for r in resources],
         packages=[PackageOut.model_validate(p) for p in pkgs],
     )
+
+
+@router.post("/{slug}/view", status_code=status.HTTP_204_NO_CONTENT)
+def track_view(slug: str, db: Session = Depends(get_db)) -> None:
+    """Increment today's visit counter for the public link (best-effort, no auth)."""
+    tenant = _active_tenant(db, slug)
+    today = datetime.now(get_zone(tenant)).date()
+    pv = db.scalar(
+        select(PageView).where(PageView.tenant_id == tenant.id, PageView.day == today)
+    )
+    if pv:
+        pv.count += 1
+    else:
+        db.add(PageView(tenant_id=tenant.id, day=today, count=1))
+    db.commit()
 
 
 class AvailabilityResponse(BaseModel):

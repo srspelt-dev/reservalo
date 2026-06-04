@@ -7,7 +7,17 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Booking, BookingStatus, Package, Resource, Schedule, Service, User, UserRole
+from app.models import (
+    Booking,
+    BookingStatus,
+    Package,
+    PageView,
+    Resource,
+    Schedule,
+    Service,
+    User,
+    UserRole,
+)
 from app.schemas.booking import BookingOut
 from app.services.availability import get_zone
 
@@ -23,6 +33,7 @@ class DashboardStats(BaseModel):
     bookings_today: int
     bookings_week: int
     bookings_week_prev: int
+    views_week: int
     upcoming_bookings: int
     total_clients: int
     total_services: int
@@ -155,10 +166,19 @@ def dashboard(
         )
     )
 
+    views_week = db.scalar(
+        select(func.coalesce(func.sum(PageView.count), 0)).where(
+            PageView.tenant_id == tid,
+            PageView.day >= week_days[0],
+            PageView.day <= week_days[-1],
+        )
+    ) or 0
+
     return DashboardStats(
         bookings_today=len(today_bookings),
         bookings_week=len(week_bookings),
         bookings_week_prev=bookings_week_prev,
+        views_week=views_week,
         upcoming_bookings=db.scalar(
             select(func.count(Booking.id)).where(
                 Booking.tenant_id == tid, active, *staff_only, Booking.start_datetime > now

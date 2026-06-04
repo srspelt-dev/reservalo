@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, ListChecks, Paperclip, Pencil, Plus, X } from "lucide-react";
+import { Check, Download, ListChecks, Paperclip, Pencil, Plus, X, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -68,6 +68,23 @@ export default function BookingsPage() {
   const editing = form.id > 0;
   const { data: tenant } = useTenant();
   const isEvents = tenant?.booking_mode === "events";
+
+  // Opens WhatsApp with a pre-written reminder for the client (PY: local 0… → +595).
+  const remindWhatsApp = (b: Booking) => {
+    const digits = (b.client_phone || "").replace(/\D/g, "");
+    if (!digits) {
+      toast.error("Esta reserva no tiene teléfono cargado");
+      return;
+    }
+    const num = digits.startsWith("0") ? `595${digits.slice(1)}` : digits;
+    const when = format(new Date(b.start_datetime), "EEEE d 'de' MMMM 'a las' HH:mm", {
+      locale: es,
+    });
+    const msg = `Hola ${b.client_name.split(" ")[0]}, te recordamos tu turno en ${
+      tenant?.name ?? ""
+    } el ${when}. ¡Te esperamos! 🙌`;
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
 
   const { data: services = [] } = useQuery<Service[]>({
     queryKey: ["services"],
@@ -310,6 +327,17 @@ export default function BookingsPage() {
                           <Check className="h-4 w-4 text-green-600" />
                         </Button>
                       )}
+                      {b.client_phone && b.status !== "cancelled" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Recordar por WhatsApp"
+                          title="Recordar por WhatsApp"
+                          onClick={() => remindWhatsApp(b)}
+                        >
+                          <MessageCircle className="h-4 w-4 text-[#25D366]" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -377,6 +405,16 @@ export default function BookingsPage() {
                     {b.payment_status !== "paid" && b.status !== "cancelled" && (
                       <Button variant="ghost" size="icon" onClick={() => markPaid.mutate(b.id)}>
                         <Check className="h-4 w-4 text-green-600" />
+                      </Button>
+                    )}
+                    {b.client_phone && b.status !== "cancelled" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Recordar por WhatsApp"
+                        onClick={() => remindWhatsApp(b)}
+                      >
+                        <MessageCircle className="h-4 w-4 text-[#25D366]" />
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" onClick={() => openEdit(b)}>

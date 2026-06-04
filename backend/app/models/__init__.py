@@ -1,5 +1,6 @@
 from app.models.booking import Booking, BookingStatus, PaymentMethod, PaymentStatus
 from app.models.package import Package, booking_packages
+from app.models.page_view import PageView
 from app.models.plan import Feature, Plan, plan_features
 from app.models.resource import Resource
 from app.models.schedule import Schedule
@@ -14,6 +15,7 @@ __all__ = [
     "BookingStatus",
     "Feature",
     "Package",
+    "PageView",
     "PaymentMethod",
     "PaymentStatus",
     "Plan",

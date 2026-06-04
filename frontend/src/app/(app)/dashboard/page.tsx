@@ -415,6 +415,39 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {user?.role === "owner" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Rendimiento de tu link · últimos 7 días</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 divide-x text-center">
+              <div className="px-2">
+                <p className="font-display text-3xl font-bold tabular-nums">{data.views_week}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Visitas</p>
+              </div>
+              <div className="px-2">
+                <p className="font-display text-3xl font-bold tabular-nums">{data.bookings_week}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Reservas</p>
+              </div>
+              <div className="px-2">
+                <p className="font-display text-3xl font-bold tabular-nums text-primary">
+                  {data.views_week > 0
+                    ? `${Math.round((data.bookings_week / data.views_week) * 100)}%`
+                    : "—"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Conversión</p>
+              </div>
+            </div>
+            {data.views_week === 0 && (
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Compartí tu link para empezar a ver cuántas visitas se vuelven reservas.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Onboarding data={data} isEvents={isEvents} />
 
       {sub && (

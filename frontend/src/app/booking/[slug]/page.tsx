@@ -51,6 +51,19 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) =>
     setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
 
+  // Count one public visit per browser session (best-effort link metrics).
+  useEffect(() => {
+    try {
+      const key = `reservalo_viewed_${slug}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        publicApi.post(`/public/${slug}/view`).catch(() => {});
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [slug]);
+
   // Remember client data for repeat customers.
   useEffect(() => {
     try {
